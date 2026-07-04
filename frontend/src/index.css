@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  /* Warna brand SEAPEDIA: nuansa laut */
+  --color-sea-50: #effcfa;
+  --color-sea-100: #d7f5f2;
+  --color-sea-200: #b0eae6;
+  --color-sea-300: #7cd8d5;
+  --color-sea-400: #45bebe;
+  --color-sea-500: #29a2a5;
+  --color-sea-600: #1e8186;
+  --color-sea-700: #1c676c;
+  --color-sea-800: #1b5357;
+  --color-sea-900: #1a4549;
+  --color-sea-950: #0a272b;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}

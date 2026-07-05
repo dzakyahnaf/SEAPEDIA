@@ -4,11 +4,12 @@ Marketplace multi-peran yang menghubungkan **Pembeli**, **Penjual**, dan
 **Pengantar** dalam satu ekosistem — dibangun untuk Technical Challenge
 Software Engineering Academy COMPFEST 18.
 
-> **Status pengerjaan: Level 5 selesai** (Level 1: Public Marketplace &
+> **Status pengerjaan: Level 6 selesai** (Level 1: Public Marketplace &
 > Auth multi-role · Level 2: Seller Experience · Level 3: Buyer Wallet,
 > Cart, Checkout · Level 4: Diskon, Pemrosesan Pesanan, Laporan · Level 5:
-> Delivery & Driver Workflow). Level berikutnya sedang dikerjakan bertahap —
-> lihat riwayat commit.
+> Delivery & Driver Workflow · Level 6: Admin Monitoring & Overdue Handling).
+> Level 7 (security hardening & finalisasi) sedang dikerjakan — lihat riwayat
+> commit.
 
 ## Tech Stack
 
@@ -376,10 +377,78 @@ Endpoint Level 5 (semua butuh **role aktif DRIVER**):
 | POST   | `/api/driver/jobs/{order_id}/complete` | Konfirmasi → Pesanan Selesai     |
 | GET    | `/api/driver/earnings`            | Job aktif, riwayat, total earning     |
 
-## Aturan Bisnis Level Lanjut (placeholder)
+## Admin Monitoring & Overdue Handling (Level 6)
 
-Aturan berikut disyaratkan soal dan akan didokumentasikan penuh saat levelnya
-dikerjakan:
+### Dashboard Monitoring
 
-- **SLA pengiriman & simulasi hari berikutnya** (Level 6).
-- **Catatan keamanan lengkap** (Level 7).
+Admin (role aktif ADMIN) memantau seluruh marketplace via tab dashboard:
+pengguna, toko, produk, pesanan (dengan penanda overdue), pengiriman, voucher
+& promo, serta pesanan overdue. Ringkasan angka kunci ada di tab Ringkasan.
+Semua endpoint `/api/admin/*` hanya dapat diakses role aktif ADMIN.
+
+### Manajemen Voucher & Promo
+
+UI Admin lengkap untuk generate voucher/promo dan melihat daftar + detail
+(kadaluarsa, kuota, status aktif/kadaluarsa) — tab "Voucher & Promo".
+
+### SLA Pengiriman
+
+| Metode   | SLA (batas waktu penyelesaian) |
+| -------- | ------------------------------ |
+| Instant  | 24 jam                         |
+| Next Day | 48 jam                         |
+| Regular  | 96 jam                         |
+
+Deadline sebuah pesanan = `waktu checkout + SLA metode`. Pesanan **overdue**
+jika belum mencapai status terminal (Pesanan Selesai / Dikembalikan) dan waktu
+efektif sudah melewati deadline.
+
+### Simulasi Waktu (Maju Hari)
+
+Karena SLA dihitung dalam jam/hari, disediakan **jam simulasi**: Admin dapat
+memajukan waktu (`POST /api/admin/clock/advance?days=N`) tanpa menunggu waktu
+nyata. Offset ini **hanya memengaruhi evaluasi SLA overdue**, tidak memengaruhi
+kadaluarsa token/sesi login. Reset dengan `POST /api/admin/clock/reset`.
+
+### Auto Refund + Auto Return
+
+`POST /api/admin/overdue/run` memproses semua pesanan overdue. Untuk setiap
+pesanan yang melewati SLA:
+
+1. **Refund penuh** `order.total` dikembalikan ke wallet Buyer + dicatat sebagai
+   transaksi `REFUND` di riwayat wallet.
+2. **Stok dipulihkan** sesuai kuantitas tiap item (penambahan atomik; produk
+   yang sudah dihapus dilewati).
+3. **Status → Dikembalikan**, dicatat di riwayat status dengan timestamp
+   (jejak yang terlihat, bukan perubahan diam-diam).
+4. **Pendapatan Seller**: laporan pendapatan hanya menghitung pesanan
+   *Pesanan Selesai*, sehingga pesanan *Dikembalikan* otomatis tidak dihitung
+   sebagai pendapatan Seller — penyesuaian yang jelas dan konsisten.
+
+**Idempotensi & pencegahan double-processing**: hanya pesanan berstatus
+non-terminal yang diproses. Setelah menjadi *Dikembalikan* (terminal), pesanan
+tidak akan diproses lagi, sehingga **tidak mungkin terjadi double refund,
+double restore stok, atau double reversal** untuk pesanan yang sama.
+
+Endpoint Level 6 (semua butuh **role aktif ADMIN**):
+
+| Method | Endpoint                        | Keterangan                          |
+| ------ | ------------------------------- | ----------------------------------- |
+| GET    | `/api/admin/summary`            | Ringkasan angka marketplace         |
+| GET    | `/api/admin/users`              | Monitoring pengguna                 |
+| GET    | `/api/admin/stores`             | Monitoring toko                     |
+| GET    | `/api/admin/products`           | Monitoring produk                   |
+| GET    | `/api/admin/orders`             | Monitoring pesanan (filter status)  |
+| GET    | `/api/admin/deliveries`         | Monitoring job pengiriman           |
+| GET    | `/api/admin/overdue`            | Pesanan overdue saat ini            |
+| GET    | `/api/admin/clock`              | Status jam simulasi                 |
+| POST   | `/api/admin/clock/advance`      | Majukan waktu N hari                |
+| POST   | `/api/admin/clock/reset`        | Reset offset simulasi               |
+| POST   | `/api/admin/overdue/run`        | Proses refund+return semua overdue  |
+| GET/POST | `/api/admin/vouchers`         | List / generate voucher (Level 4)   |
+| GET/POST | `/api/admin/promos`           | List / generate promo (Level 4)     |
+
+## Catatan Keamanan (Level 7 — placeholder)
+
+Akan didokumentasikan penuh saat Level 7: SQL Injection, XSS, validasi input,
+perilaku sesi, dan role-based access control.

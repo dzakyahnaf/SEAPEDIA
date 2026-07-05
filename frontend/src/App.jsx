@@ -9,10 +9,11 @@ import ProductDetail from "./pages/ProductDetail";
 import Products from "./pages/Products";
 import Register from "./pages/Register";
 import SelectRole from "./pages/SelectRole";
+import StoreDetail from "./pages/StoreDetail";
+import SellerDashboard from "./pages/seller/SellerDashboard";
 import AdminDashboard from "./pages/shells/AdminDashboard";
 import BuyerDashboard from "./pages/shells/BuyerDashboard";
 import DriverDashboard from "./pages/shells/DriverDashboard";
-import SellerDashboard from "./pages/shells/SellerDashboard";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/products" element={<Products />} />
             <Route path="/products/:id" element={<ProductDetail />} />
+            <Route path="/stores/:id" element={<StoreDetail />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
 

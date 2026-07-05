@@ -4,8 +4,9 @@ Marketplace multi-peran yang menghubungkan **Pembeli**, **Penjual**, dan
 **Pengantar** dalam satu ekosistem — dibangun untuk Technical Challenge
 Software Engineering Academy COMPFEST 18.
 
-> **Status pengerjaan: Level 1 selesai** (Public Marketplace, Authentication
-> multi-role, Application Reviews, Reusable UI Foundations).
+> **Status pengerjaan: Level 2 selesai** (Level 1: Public Marketplace,
+> Authentication multi-role, Application Reviews, Reusable UI · Level 2:
+> Seller Store Management, Product Management, Public Catalog Integration).
 > Level berikutnya sedang dikerjakan bertahap — lihat riwayat commit.
 
 ## Tech Stack
@@ -168,6 +169,31 @@ Ringkasan endpoint Level 1:
 | GET    | `/api/stores/{id}`      | Publik         | Ringkasan toko + produknya         |
 | GET    | `/api/reviews`          | Publik         | Daftar review aplikasi             |
 | POST   | `/api/reviews`          | Publik (guest) | Kirim review aplikasi              |
+
+Endpoint Level 2 (semua butuh **role aktif SELLER**):
+
+| Method | Endpoint                     | Keterangan                                  |
+| ------ | ---------------------------- | ------------------------------------------- |
+| GET    | `/api/seller/store`          | Profil toko sendiri (null jika belum punya) |
+| POST   | `/api/seller/store`          | Buat toko (nama unik, satu toko per Seller) |
+| PUT    | `/api/seller/store`          | Ubah profil toko sendiri                    |
+| GET    | `/api/seller/products`       | Daftar produk toko sendiri                  |
+| POST   | `/api/seller/products`       | Tambah produk ke toko sendiri               |
+| PUT    | `/api/seller/products/{id}`  | Ubah produk (hanya milik sendiri)           |
+| DELETE | `/api/seller/products/{id}`  | Hapus produk (hanya milik sendiri)          |
+
+## Aturan Bisnis Seller (Level 2)
+
+- **Nama toko unik** — ditegakkan ganda: unique constraint di database dan
+  validasi backend case-insensitive ("Toko A" vs "toko a" dianggap sama),
+  dengan pesan error yang jelas di form.
+- **Satu Seller satu toko**; Seller hanya dapat mengelola tokonya sendiri.
+- **Kepemilikan produk diverifikasi di backend**: mengubah/menghapus produk
+  toko lain ditolak 403, bukan sekadar disembunyikan di UI.
+- **Stok disimpan** di model produk karena dipakai checkout di Level 3.
+- Katalog publik (`/api/products`) sepenuhnya memakai data backend — produk
+  yang dibuat Seller langsung tampil untuk guest, lengkap dengan info toko
+  dan halaman toko publik (`/stores/:id`).
 
 ## Aturan Bisnis Level Lanjut (placeholder)
 

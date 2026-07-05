@@ -70,10 +70,10 @@ export default function ProductDetail() {
               <p className="font-bold text-slate-800">{product.store.name}</p>
               <p className="text-xs text-slate-500">{product.store.description}</p>
               <Link
-                to={`/products?store_id=${product.store.id}`}
+                to={`/stores/${product.store.id}`}
                 className="mt-1 inline-block text-xs font-semibold text-sea-700 hover:underline"
               >
-                Lihat produk toko ini →
+                Kunjungi toko ini →
               </Link>
             </div>
           </Card>

@@ -10,9 +10,15 @@ import Products from "./pages/Products";
 import Register from "./pages/Register";
 import SelectRole from "./pages/SelectRole";
 import StoreDetail from "./pages/StoreDetail";
+import BuyerDashboard from "./pages/buyer/BuyerDashboard";
+import Cart from "./pages/buyer/Cart";
+import Checkout from "./pages/buyer/Checkout";
+import OrderDetail from "./pages/buyer/OrderDetail";
+import Orders from "./pages/buyer/Orders";
 import SellerDashboard from "./pages/seller/SellerDashboard";
+import SellerOrderDetail from "./pages/seller/SellerOrderDetail";
+import SellerOrders from "./pages/seller/SellerOrders";
 import AdminDashboard from "./pages/shells/AdminDashboard";
-import BuyerDashboard from "./pages/shells/BuyerDashboard";
 import DriverDashboard from "./pages/shells/DriverDashboard";
 
 export default function App() {
@@ -57,10 +63,58 @@ export default function App() {
               }
             />
             <Route
+              path="/cart"
+              element={
+                <ProtectedRoute roles={["BUYER"]}>
+                  <Cart />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/checkout"
+              element={
+                <ProtectedRoute roles={["BUYER"]}>
+                  <Checkout />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/buyer/orders"
+              element={
+                <ProtectedRoute roles={["BUYER"]}>
+                  <Orders />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/buyer/orders/:id"
+              element={
+                <ProtectedRoute roles={["BUYER"]}>
+                  <OrderDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/seller"
               element={
                 <ProtectedRoute roles={["SELLER"]}>
                   <SellerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/seller/orders"
+              element={
+                <ProtectedRoute roles={["SELLER"]}>
+                  <SellerOrders />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/seller/orders/:id"
+              element={
+                <ProtectedRoute roles={["SELLER"]}>
+                  <SellerOrderDetail />
                 </ProtectedRoute>
               }
             />

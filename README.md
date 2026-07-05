@@ -4,10 +4,10 @@ Marketplace multi-peran yang menghubungkan **Pembeli**, **Penjual**, dan
 **Pengantar** dalam satu ekosistem — dibangun untuk Technical Challenge
 Software Engineering Academy COMPFEST 18.
 
-> **Status pengerjaan: Level 2 selesai** (Level 1: Public Marketplace,
-> Authentication multi-role, Application Reviews, Reusable UI · Level 2:
-> Seller Store Management, Product Management, Public Catalog Integration).
-> Level berikutnya sedang dikerjakan bertahap — lihat riwayat commit.
+> **Status pengerjaan: Level 3 selesai** (Level 1: Public Marketplace &
+> Auth multi-role · Level 2: Seller Experience · Level 3: Buyer Wallet,
+> Cart, dan Checkout). Level berikutnya sedang dikerjakan bertahap — lihat
+> riwayat commit.
 
 ## Tech Stack
 
@@ -195,15 +195,83 @@ Endpoint Level 2 (semua butuh **role aktif SELLER**):
   yang dibuat Seller langsung tampil untuk guest, lengkap dengan info toko
   dan halaman toko publik (`/stores/:id`).
 
+## Aturan Transaksi Buyer (Level 3)
+
+### Single-Store Checkout
+
+**Satu keranjang hanya boleh berisi produk dari satu toko.** Aturan ini:
+
+- Ditegakkan di **backend**: `POST /api/buyer/cart/items` menolak dengan
+  `409 Conflict` jika produk berasal dari toko yang berbeda dengan isi
+  keranjang saat ini.
+- Ditampilkan di **UI**: halaman keranjang menjelaskan aturan ini, dan saat
+  konflik terjadi Buyer ditawari tombol "Kosongkan & Tambahkan" untuk
+  berpindah toko secara sadar.
+- Konsekuensinya, satu checkout selalu menghasilkan **satu pesanan untuk
+  satu toko**.
+
+### Perhitungan Checkout (PPN 12%)
+
+```
+subtotal = Σ (harga produk × kuantitas)
+diskon   = 0 (Voucher/Promo hadir di Level 4)
+PPN 12%  = 12% × (subtotal − diskon)   ← dibulatkan ke rupiah terdekat
+total    = subtotal − diskon + ongkir + PPN
+```
+
+Catatan tax base: **PPN dihitung dari nilai barang setelah diskon; ongkos
+kirim tidak dikenai PPN.** Rincian subtotal, diskon, ongkir, PPN 12%, dan
+total selalu ditampilkan di ringkasan checkout (sebelum konfirmasi) dan di
+detail pesanan.
+
+### Ongkos Kirim per Metode
+
+| Metode   | Ongkir     | Estimasi                       |
+| -------- | ---------- | ------------------------------ |
+| Instant  | Rp25.000   | Tiba hari yang sama            |
+| Next Day | Rp15.000   | Tiba keesokan hari             |
+| Regular  | Rp8.000    | Tiba 2-4 hari                  |
+
+### Aturan Checkout Lainnya
+
+- Saldo wallet tidak cukup → checkout ditolak `400` dengan pesan yang jelas;
+  top-up bersifat dummy/simulasi tetapi saldo & riwayat transaksi tersimpan
+  nyata di database.
+- Stok dikurangi secara **atomik** (`UPDATE … WHERE stock >= qty`) sehingga
+  stok tidak pernah negatif meski ada checkout bersamaan; jika stok kurang,
+  checkout dibatalkan `409`.
+- Pembayaran memotong wallet dan tercatat sebagai transaksi `PAYMENT`.
+- Status awal pesanan: **"Sedang Dikemas"**; setiap perubahan status tercatat
+  di riwayat status dengan timestamp (tabel `order_status_history`).
+- Pesanan menyimpan **snapshot** alamat dan harga produk saat checkout,
+  sehingga perubahan data setelahnya tidak mengubah pesanan lama.
+
+Endpoint Level 3 (semua butuh **role aktif BUYER**, kecuali disebut lain):
+
+| Method | Endpoint                        | Keterangan                              |
+| ------ | ------------------------------- | --------------------------------------- |
+| GET    | `/api/buyer/wallet`             | Saldo + riwayat transaksi wallet        |
+| POST   | `/api/buyer/wallet/topup`       | Top-up dummy (10rb - 10jt)              |
+| GET/POST | `/api/buyer/addresses`        | Kelola alamat pengiriman                |
+| PUT/DELETE | `/api/buyer/addresses/{id}` | Ubah/hapus alamat milik sendiri         |
+| GET    | `/api/buyer/cart`               | Isi keranjang                           |
+| POST   | `/api/buyer/cart/items`         | Tambah produk (aturan satu-toko, 409)   |
+| PUT/DELETE | `/api/buyer/cart/items/{id}`| Ubah kuantitas / hapus item             |
+| DELETE | `/api/buyer/cart`               | Kosongkan keranjang                     |
+| GET    | `/api/buyer/delivery-methods`   | Daftar metode & ongkir                  |
+| POST   | `/api/buyer/checkout/preview`   | Ringkasan sebelum konfirmasi            |
+| POST   | `/api/buyer/checkout`           | Buat pesanan (potong saldo & stok)      |
+| GET    | `/api/buyer/orders`             | Riwayat pesanan Buyer                   |
+| GET    | `/api/buyer/orders/{id}`        | Detail pesanan + timeline status        |
+| GET    | `/api/seller/orders`            | (SELLER) Pesanan masuk toko sendiri     |
+| GET    | `/api/seller/orders/{id}`       | (SELLER) Detail pesanan toko sendiri    |
+
 ## Aturan Bisnis Level Lanjut (placeholder)
 
 Aturan berikut disyaratkan soal dan akan didokumentasikan penuh saat levelnya
 dikerjakan:
 
-- **Single-store checkout** (Level 3): satu keranjang hanya boleh berisi
-  produk dari satu toko.
-- **PPN 12% & kombinasi diskon** (Level 3–4): urutan perhitungan
-  subtotal → diskon → ongkir → PPN akan dijelaskan di sini.
+- **Kombinasi Voucher & Promo** (Level 4).
 - **Aturan earning Driver** (Level 5).
 - **SLA pengiriman & simulasi hari berikutnya** (Level 6).
 - **Catatan keamanan lengkap** (Level 7).

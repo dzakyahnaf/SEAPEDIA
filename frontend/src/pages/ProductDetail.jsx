@@ -1,9 +1,107 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../lib/api";
 import { formatIDR } from "../lib/format";
+
+/** Panel tambah-ke-keranjang untuk user dengan role aktif Pembeli. */
+function AddToCartPanel({ product }) {
+  const [quantity, setQuantity] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [error, setError] = useState("");
+  const [conflict, setConflict] = useState("");
+
+  async function add() {
+    setBusy(true);
+    setError("");
+    setConflict("");
+    setAdded(false);
+    try {
+      await api("/buyer/cart/items", {
+        method: "POST",
+        body: { product_id: product.id, quantity },
+      });
+      setAdded(true);
+    } catch (err) {
+      // 409 = keranjang berisi produk toko lain (aturan single-store checkout)
+      if (err.status === 409) setConflict(err.message);
+      else setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearAndAdd() {
+    setBusy(true);
+    setConflict("");
+    try {
+      await api("/buyer/cart", { method: "DELETE" });
+      await add();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
+  if (product.stock === 0) {
+    return (
+      <div className="mt-8 rounded-xl bg-rose-50 p-4 text-sm font-medium text-rose-700">
+        Stok produk ini sedang habis.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8 rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center rounded-lg border border-slate-300">
+          <button
+            className="px-3.5 py-2 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            disabled={busy || quantity <= 1}
+            onClick={() => setQuantity(quantity - 1)}
+          >
+            −
+          </button>
+          <span className="w-10 text-center text-sm font-semibold">{quantity}</span>
+          <button
+            className="px-3.5 py-2 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+            disabled={busy || quantity >= product.stock}
+            onClick={() => setQuantity(quantity + 1)}
+          >
+            +
+          </button>
+        </div>
+        <Button size="lg" disabled={busy} onClick={add} className="flex-1 sm:flex-none">
+          {busy ? "Memproses…" : "🛒 Tambah ke Keranjang"}
+        </Button>
+      </div>
+
+      {added && (
+        <p className="mt-3 text-sm font-medium text-emerald-700">
+          ✓ Ditambahkan ke keranjang.{" "}
+          <Link to="/cart" className="underline">Lihat keranjang →</Link>
+        </p>
+      )}
+      {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
+      {conflict && (
+        <div className="mt-3 rounded-lg bg-amber-50 p-3.5 text-sm text-amber-800">
+          <p>{conflict}</p>
+          <div className="mt-2.5 flex gap-2">
+            <Button size="sm" variant="danger" disabled={busy} onClick={clearAndAdd}>
+              Kosongkan & Tambahkan
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConflict("")}>
+              Batal
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -85,29 +183,34 @@ export default function ProductDetail() {
             </p>
           </div>
 
-          {/* Guest tidak melihat aksi privat; info checkout hadir di Level 3 */}
-          <div className="mt-8 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-            {!isLoggedIn && (
-              <>
-                Ingin membeli produk ini?{" "}
-                <Link to="/login" className="font-semibold text-sea-700 hover:underline">
-                  Masuk
-                </Link>{" "}
-                atau{" "}
-                <Link to="/register" className="font-semibold text-sea-700 hover:underline">
-                  daftar
-                </Link>{" "}
-                sebagai Pembeli. Fitur keranjang & checkout hadir pada tahap
-                pengembangan berikutnya.
-              </>
-            )}
-            {isLoggedIn && isActiveBuyer && (
-              <>🛒 Fitur keranjang & checkout untuk Pembeli hadir pada tahap pengembangan berikutnya (Level 3).</>
-            )}
-            {isLoggedIn && !isActiveBuyer && (
-              <>Anda sedang tidak dalam peran Pembeli. Ganti role aktif ke Pembeli untuk berbelanja nanti.</>
-            )}
-          </div>
+          {/* Aksi pembelian — hanya untuk role aktif Pembeli */}
+          {isActiveBuyer ? (
+            <AddToCartPanel product={product} />
+          ) : (
+            <div className="mt-8 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+              {!isLoggedIn ? (
+                <>
+                  Ingin membeli produk ini?{" "}
+                  <Link to="/login" className="font-semibold text-sea-700 hover:underline">
+                    Masuk
+                  </Link>{" "}
+                  atau{" "}
+                  <Link to="/register" className="font-semibold text-sea-700 hover:underline">
+                    daftar
+                  </Link>{" "}
+                  sebagai Pembeli terlebih dahulu.
+                </>
+              ) : (
+                <>
+                  Anda sedang tidak dalam peran Pembeli.{" "}
+                  <Link to="/select-role" className="font-semibold text-sea-700 hover:underline">
+                    Ganti role aktif
+                  </Link>{" "}
+                  ke Pembeli untuk berbelanja.
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

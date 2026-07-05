@@ -52,6 +52,7 @@ export default function Navbar() {
           <NavItem to="/">Beranda</NavItem>
           <NavItem to="/products">Produk</NavItem>
           {isLoggedIn && <NavItem to="/dashboard">Dashboard</NavItem>}
+          {user?.active_role === "BUYER" && <NavItem to="/cart">🛒 Keranjang</NavItem>}
         </div>
 
         <div className="hidden items-center gap-3 md:flex">
@@ -114,6 +115,9 @@ export default function Navbar() {
             <NavItem to="/" onClick={close}>Beranda</NavItem>
             <NavItem to="/products" onClick={close}>Produk</NavItem>
             {isLoggedIn && <NavItem to="/dashboard" onClick={close}>Dashboard</NavItem>}
+            {user?.active_role === "BUYER" && (
+              <NavItem to="/cart" onClick={close}>🛒 Keranjang</NavItem>
+            )}
           </div>
           <div className="mt-3 border-t border-slate-100 pt-3">
             {!isLoggedIn ? (

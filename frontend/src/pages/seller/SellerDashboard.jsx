@@ -213,14 +213,17 @@ export default function SellerDashboard() {
         </Card>
       </section>
 
-      {/* Fitur berikutnya */}
+      {/* Pesanan & fitur berikutnya */}
       <section className="mt-10">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-          Segera Hadir
-        </h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Link to="/seller/orders">
+            <Card className="h-full p-4 transition-shadow hover:shadow-md">
+              <p className="text-xl">📥</p>
+              <p className="mt-1 text-sm font-bold text-slate-800">Pesanan Masuk</p>
+              <p className="text-[11px] text-sea-700">Lihat pesanan dari pembeli →</p>
+            </Card>
+          </Link>
           {[
-            { icon: "📥", title: "Pesanan Masuk", level: 3 },
             { icon: "✅", title: "Proses Pesanan", level: 4 },
             { icon: "💰", title: "Laporan Pendapatan", level: 4 },
           ].map((f) => (

@@ -1,4 +1,4 @@
-# SEAPEDIA 🌊
+# SEAPEDIA - SE Academy Compfest 2026
 
 Marketplace multi-peran yang menghubungkan **Pembeli**, **Penjual**, dan
 **Pengantar** dalam satu ekosistem — dibangun untuk Technical Challenge

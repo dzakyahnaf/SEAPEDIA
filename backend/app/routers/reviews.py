@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import AppReview
 from ..schemas.review import ReviewCreate, ReviewItem, ReviewListResponse
+from ..services.sanitize import clean_text
 
 router = APIRouter(prefix="/reviews", tags=["Review Aplikasi"])
 
@@ -43,10 +44,15 @@ def create_review(payload: ReviewCreate, db: Session = Depends(get_db)):
     Komentar disimpan sebagai teks polos dan dirender sebagai teks di klien
     (tidak pernah dieksekusi sebagai HTML)."""
     review = AppReview(
-        reviewer_name=payload.reviewer_name.strip(),
+        reviewer_name=clean_text(payload.reviewer_name),
         rating=payload.rating,
-        comment=payload.comment.strip(),
+        comment=clean_text(payload.comment),
     )
+    if not review.reviewer_name or not review.comment:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Nama dan komentar tidak boleh kosong.",
+        )
     db.add(review)
     db.commit()
     db.refresh(review)

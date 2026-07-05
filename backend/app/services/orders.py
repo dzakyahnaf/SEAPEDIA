@@ -37,6 +37,15 @@ DELIVERY_METHODS = {
 }
 
 
+# Earning Driver = 80% dari ongkir pesanan yang diantar (didokumentasikan di
+# README). 20% sisanya dianggap potongan platform.
+DRIVER_EARNING_RATE = 0.8
+
+
+def calc_driver_earning(delivery_fee: int) -> int:
+    return round(delivery_fee * DRIVER_EARNING_RATE)
+
+
 def calc_tax(subtotal: int, discount: int = 0) -> int:
     return round((subtotal - discount) * TAX_RATE_PERCENT / 100)
 
@@ -94,6 +103,45 @@ def order_to_detail(order: Order) -> dict:
         "delivery_fee": order.delivery_fee,
         "tax_rate_percent": TAX_RATE_PERCENT,
         "tax": order.tax,
+        "history": [
+            {"status": h.status, "note": h.note, "created_at": h.created_at}
+            for h in order.history
+        ],
+    }
+
+
+def order_to_job(order: Order) -> dict:
+    """Ringkasan pesanan dari sudut pandang Driver (job pengiriman).
+    Menyembunyikan rincian finansial toko, menonjolkan tujuan & earning."""
+    return {
+        "order_id": order.id,
+        "code": order.code,
+        "store_name": order.store.name,
+        "status": order.status,
+        "recipient_name": order.recipient_name,
+        "phone": order.phone,
+        "full_address": order.full_address,
+        "delivery_method": order.delivery_method,
+        "delivery_method_label": DELIVERY_METHODS[order.delivery_method]["label"],
+        "delivery_fee": order.delivery_fee,
+        "earning": calc_driver_earning(order.delivery_fee),
+        "item_count": sum(item.quantity for item in order.items),
+        "created_at": order.created_at,
+    }
+
+
+def order_to_job_detail(order: Order) -> dict:
+    return {
+        **order_to_job(order),
+        "items": [
+            {
+                "product_name": item.product_name,
+                "price": item.price,
+                "quantity": item.quantity,
+                "line_total": item.line_total,
+            }
+            for item in order.items
+        ],
         "history": [
             {"status": h.status, "note": h.note, "created_at": h.created_at}
             for h in order.history

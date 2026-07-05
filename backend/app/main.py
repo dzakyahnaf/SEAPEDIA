@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import Base, engine
-from .routers import auth, catalog, reviews
+from .routers import auth, catalog, reviews, seller
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(catalog.router, prefix="/api")
 app.include_router(reviews.router, prefix="/api")
+app.include_router(seller.router, prefix="/api")
 
 
 @app.get("/", tags=["Root"])

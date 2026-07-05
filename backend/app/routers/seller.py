@@ -4,9 +4,11 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import require_active_role
-from ..models import ROLE_SELLER, AuthSession, Product, Store
+from ..models import ROLE_SELLER, AuthSession, Order, Product, Store
 from ..schemas.auth import MessageResponse
+from ..schemas.order import OrderDetailOut, OrderSummaryOut
 from ..schemas.seller import ProductPayload, SellerProduct, StorePayload, StoreResponse
+from ..services.orders import order_to_detail, order_to_summary
 
 router = APIRouter(
     prefix="/seller",
@@ -196,3 +198,34 @@ def delete_product(
     db.delete(product)
     db.commit()
     return MessageResponse(message=f"Produk '{product.name}' telah dihapus.")
+
+
+# ---------- Pesanan masuk ----------
+
+@router.get("/orders", response_model=list[OrderSummaryOut])
+def incoming_orders(
+    session: AuthSession = Depends(require_active_role(ROLE_SELLER)),
+    db: Session = Depends(get_db),
+):
+    """Daftar pesanan yang masuk ke toko milik Seller yang sedang login."""
+    store = require_own_store(session, db)
+    orders = db.scalars(
+        select(Order)
+        .where(Order.store_id == store.id)
+        .order_by(Order.created_at.desc())
+    ).all()
+    return [order_to_summary(o) for o in orders]
+
+
+@router.get("/orders/{order_id}", response_model=OrderDetailOut)
+def incoming_order_detail(
+    order_id: str,
+    session: AuthSession = Depends(require_active_role(ROLE_SELLER)),
+    db: Session = Depends(get_db),
+):
+    """Detail pesanan. Hanya pesanan milik toko sendiri yang bisa dilihat."""
+    store = require_own_store(session, db)
+    order = db.get(Order, order_id)
+    if order is None or order.store_id != store.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pesanan tidak ditemukan.")
+    return order_to_detail(order)

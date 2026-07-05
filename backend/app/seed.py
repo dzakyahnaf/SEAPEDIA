@@ -10,7 +10,17 @@ sudah ada tidak diduplikasi.
 from sqlalchemy import func, select
 
 from .database import Base, SessionLocal, engine
-from .models import AppReview, Product, Store, User, UserRole
+from .models import (
+    TX_TOPUP,
+    Address,
+    AppReview,
+    Product,
+    Store,
+    User,
+    UserRole,
+    Wallet,
+    WalletTransaction,
+)
 from .security import hash_password
 
 DEMO_USERS = [
@@ -52,6 +62,16 @@ DEMO_PRODUCTS = {
         ("Dress Midi Casual", "Dress midi bahan rayon adem, model A-line, ukuran S-XXL.", 129000, 35),
         ("Tas Selempang Mini", "Tas selempang kulit sintetis premium dengan tali rantai, muat HP dan dompet.", 99000, 50),
     ],
+}
+
+# Saldo wallet awal & alamat demo untuk mempermudah pengujian checkout.
+DEMO_WALLETS = {"budi": 500_000, "rina": 300_000}
+
+DEMO_ADDRESSES = {
+    "budi": ("Rumah", "Budi Santoso", "081234567890",
+             "Jl. Merdeka No. 10, RT 02/RW 05, Kel. Sukamaju, Depok, Jawa Barat 16411"),
+    "rina": ("Kos", "Rina Amelia", "085712345678",
+             "Jl. Margonda Raya No. 88, Kost Melati Kamar 12, Depok, Jawa Barat 16424"),
 }
 
 DEMO_REVIEWS = [
@@ -103,6 +123,29 @@ def seed() -> None:
                         store_id=store.id, name=name, description=desc,
                         price=price, stock=stock,
                     ))
+        db.commit()
+
+        for username, balance in DEMO_WALLETS.items():
+            user = db.scalar(select(User).where(User.username == username))
+            if user is not None and db.get(Wallet, user.id) is None:
+                db.add(Wallet(user_id=user.id, balance=balance))
+                db.add(WalletTransaction(
+                    user_id=user.id, amount=balance, type=TX_TOPUP,
+                    description="Saldo awal akun demo",
+                ))
+                print(f"  [+] wallet {username}: Rp{balance:,}")
+
+        for username, (label, recipient, phone, full_address) in DEMO_ADDRESSES.items():
+            user = db.scalar(select(User).where(User.username == username))
+            if user is None:
+                continue
+            has_address = db.scalar(select(Address).where(Address.user_id == user.id))
+            if has_address is None:
+                db.add(Address(
+                    user_id=user.id, label=label, recipient_name=recipient,
+                    phone=phone, full_address=full_address, is_default=True,
+                ))
+                print(f"  [+] alamat {username}")
         db.commit()
 
         review_count = db.scalar(select(func.count(AppReview.id))) or 0

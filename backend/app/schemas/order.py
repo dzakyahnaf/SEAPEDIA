@@ -39,6 +39,8 @@ class OrderDetailOut(OrderSummaryOut):
     full_address: str
     subtotal: int
     discount: int
+    discount_code: str | None = None
+    discount_type: str | None = None
     delivery_fee: int
     tax_rate_percent: int
     tax: int

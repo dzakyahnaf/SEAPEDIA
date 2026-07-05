@@ -9,6 +9,8 @@ from ..deps import require_active_role
 from ..models import (
     ROLE_BUYER,
     STATUS_DIKEMAS,
+    STATUS_DIKEMBALIKAN,
+    STATUS_SELESAI,
     TX_PAYMENT,
     TX_TOPUP,
     Address,
@@ -24,6 +26,7 @@ from ..schemas.auth import MessageResponse
 from ..schemas.buyer import (
     AddressOut,
     AddressPayload,
+    AppliedDiscountOut,
     CartItemAdd,
     CartItemOut,
     CartItemUpdate,
@@ -38,6 +41,8 @@ from ..schemas.buyer import (
 )
 from ..schemas.catalog import StoreSummary
 from ..schemas.order import OrderDetailOut, OrderSummaryOut
+from ..schemas.report import BuyerReport
+from ..services.discounts import consume_voucher_usage, validate_discount
 from ..services.orders import (
     DELIVERY_METHODS,
     TAX_RATE_PERCENT,
@@ -363,14 +368,25 @@ def checkout_preview(
     db: Session = Depends(get_db),
 ):
     """Ringkasan checkout (subtotal, diskon, ongkir, PPN 12%, total) untuk
-    ditampilkan sebelum konfirmasi. Tidak mengubah data apa pun."""
+    ditampilkan sebelum konfirmasi. Kode diskon opsional divalidasi di sini.
+    Tidak mengubah data apa pun."""
     items = get_cart_items(db, session.user_id)
     if not items:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Keranjang masih kosong.")
     method = require_delivery_method(payload.delivery_method)
 
     subtotal = sum(i.product.price * i.quantity for i in items)
-    discount = 0  # Voucher/Promo hadir di Level 4
+
+    applied = None
+    discount = 0
+    if payload.discount_code:
+        result = validate_discount(db, payload.discount_code, subtotal)
+        discount = result.amount
+        applied = AppliedDiscountOut(
+            code=result.code, type=result.type, percent=result.percent,
+            amount=result.amount, description=result.description,
+        )
+
     tax = calc_tax(subtotal, discount)
     total = calc_total(subtotal, discount, method["fee"], tax)
     wallet = get_or_create_wallet(db, session.user_id)
@@ -382,6 +398,7 @@ def checkout_preview(
         items=[cart_item_out(i) for i in items],
         subtotal=subtotal,
         discount=discount,
+        applied_discount=applied,
         delivery_method=payload.delivery_method,
         delivery_fee=method["fee"],
         tax_rate_percent=TAX_RATE_PERCENT,
@@ -408,7 +425,17 @@ def checkout(
     address = require_own_address(payload.address_id, session, db)
 
     subtotal = sum(i.product.price * i.quantity for i in items)
+
+    # Validasi & terapkan kode diskon (opsional). Satu kode per checkout.
     discount = 0
+    discount_code = None
+    discount_type = None
+    if payload.discount_code:
+        result = validate_discount(db, payload.discount_code, subtotal)
+        discount = result.amount
+        discount_code = result.code
+        discount_type = result.type
+
     tax = calc_tax(subtotal, discount)
     total = calc_total(subtotal, discount, method["fee"], tax)
 
@@ -455,6 +482,8 @@ def checkout(
         delivery_method=payload.delivery_method,
         subtotal=subtotal,
         discount=discount,
+        discount_code=discount_code,
+        discount_type=discount_type,
         delivery_fee=method["fee"],
         tax=tax,
         total=total,
@@ -462,6 +491,10 @@ def checkout(
     )
     db.add(order)
     db.flush()
+
+    # Kurangi kuota voucher setelah checkout dipastikan berhasil.
+    if discount_code:
+        consume_voucher_usage(db, discount_code)
 
     for item in items:
         db.add(OrderItem(
@@ -508,3 +541,33 @@ def my_order_detail(
     if order is None or order.buyer_id != session.user_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pesanan tidak ditemukan.")
     return order_to_detail(order)
+
+
+# ---------- Laporan pengeluaran ----------
+
+@router.get("/report", response_model=BuyerReport)
+def spending_report(
+    session: AuthSession = Depends(buyer_session),
+    db: Session = Depends(get_db),
+):
+    """Ringkasan pengeluaran Buyer. Pesanan yang dikembalikan (refund) tidak
+    dihitung sebagai pengeluaran."""
+    orders = db.scalars(
+        select(Order).where(Order.buyer_id == session.user_id)
+    ).all()
+
+    completed = [o for o in orders if o.status == STATUS_SELESAI]
+    returned = [o for o in orders if o.status == STATUS_DIKEMBALIKAN]
+    active = [o for o in orders if o.status not in (STATUS_SELESAI, STATUS_DIKEMBALIKAN)]
+    # Pengeluaran = total pesanan yang tidak dikembalikan.
+    counted = [o for o in orders if o.status != STATUS_DIKEMBALIKAN]
+
+    return BuyerReport(
+        total_orders=len(orders),
+        completed_orders=len(completed),
+        active_orders=len(active),
+        returned_orders=len(returned),
+        total_spent=sum(o.total for o in counted),
+        total_discount_saved=sum(o.discount for o in counted),
+        total_tax_paid=sum(o.tax for o in counted),
+    )

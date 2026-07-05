@@ -89,6 +89,8 @@ def order_to_detail(order: Order) -> dict:
         "full_address": order.full_address,
         "subtotal": order.subtotal,
         "discount": order.discount,
+        "discount_code": order.discount_code,
+        "discount_type": order.discount_type,
         "delivery_fee": order.delivery_fee,
         "tax_rate_percent": TAX_RATE_PERCENT,
         "tax": order.tax,

@@ -7,6 +7,8 @@ katalog, dan beberapa review aplikasi. Aman dijalankan berulang; data yang
 sudah ada tidak diduplikasi.
 """
 
+from datetime import timedelta
+
 from sqlalchemy import func, select
 
 from .database import Base, SessionLocal, engine
@@ -15,13 +17,15 @@ from .models import (
     Address,
     AppReview,
     Product,
+    Promo,
     Store,
     User,
     UserRole,
+    Voucher,
     Wallet,
     WalletTransaction,
 )
-from .security import hash_password
+from .security import hash_password, utcnow
 
 DEMO_USERS = [
     # (username, email, password, roles, store_name, store_desc)
@@ -79,6 +83,19 @@ DEMO_REVIEWS = [
     ("Fajar", 4, "Konsep multi-role nya menarik, saya bisa jadi pembeli sekaligus buka toko."),
     ("Sari", 5, "Registrasinya cepat, tidak ribet. Semoga fitur checkout segera hadir."),
     ("Yoga", 4, "Sebagai calon driver, dashboard-nya sudah kelihatan rapi. Ditunggu fitur ambil job-nya."),
+]
+
+# (code, description, percent, max_discount, min_spend, remaining_usage)
+DEMO_VOUCHERS = [
+    ("HEMAT10", "Diskon 10% maksimal Rp20.000", 10, 20_000, 0, 100),
+    ("NEWBIE25", "Diskon 25% untuk pelanggan baru, maks Rp50.000, min belanja Rp100.000", 25, 50_000, 100_000, 50),
+    ("KADALUARSA", "Voucher contoh yang sudah kadaluarsa", 15, 0, 0, 10),  # expired
+]
+
+# (code, description, percent, max_discount, min_spend)
+DEMO_PROMOS = [
+    ("GAJIAN", "Promo gajian: diskon 15% maks Rp30.000", 15, 30_000, 0),
+    ("ONGKIRHEMAT", "Diskon 5% tanpa minimum", 5, 0, 0),
 ]
 
 
@@ -154,6 +171,28 @@ def seed() -> None:
                 db.add(AppReview(reviewer_name=reviewer, rating=rating, comment=comment))
             db.commit()
             print(f"  [+] {len(DEMO_REVIEWS)} review aplikasi")
+
+        # Voucher & Promo demo. Sebagian besar berlaku 90 hari; "KADALUARSA"
+        # sengaja dibuat expired kemarin untuk menguji penolakan.
+        future = utcnow() + timedelta(days=90)
+        past = utcnow() - timedelta(days=1)
+        for code, desc, percent, max_disc, min_spend, usage in DEMO_VOUCHERS:
+            if db.scalar(select(Voucher).where(Voucher.code == code)) is None:
+                db.add(Voucher(
+                    code=code, description=desc, percent=percent,
+                    max_discount=max_disc, min_spend=min_spend,
+                    remaining_usage=usage,
+                    expires_at=past if code == "KADALUARSA" else future,
+                ))
+                print(f"  [+] voucher {code}")
+        for code, desc, percent, max_disc, min_spend in DEMO_PROMOS:
+            if db.scalar(select(Promo).where(Promo.code == code)) is None:
+                db.add(Promo(
+                    code=code, description=desc, percent=percent,
+                    max_discount=max_disc, min_spend=min_spend, expires_at=future,
+                ))
+                print(f"  [+] promo {code}")
+        db.commit()
 
         print("Seed selesai.")
     finally:

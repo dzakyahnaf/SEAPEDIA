@@ -81,11 +81,21 @@ class DeliveryMethodOut(BaseModel):
 
 class CheckoutPreviewRequest(BaseModel):
     delivery_method: str
+    discount_code: str | None = None
 
 
 class CheckoutRequest(BaseModel):
     address_id: str
     delivery_method: str
+    discount_code: str | None = None
+
+
+class AppliedDiscountOut(BaseModel):
+    code: str
+    type: str  # VOUCHER / PROMO
+    percent: int
+    amount: int
+    description: str
 
 
 class CheckoutPreviewOut(BaseModel):
@@ -93,6 +103,7 @@ class CheckoutPreviewOut(BaseModel):
     items: list[CartItemOut]
     subtotal: int
     discount: int
+    applied_discount: AppliedDiscountOut | None = None
     delivery_method: str
     delivery_fee: int
     tax_rate_percent: int

@@ -35,6 +35,10 @@ TX_TOPUP = "TOPUP"
 TX_PAYMENT = "PAYMENT"
 TX_REFUND = "REFUND"
 
+# Jenis diskon.
+DISCOUNT_VOUCHER = "VOUCHER"
+DISCOUNT_PROMO = "PROMO"
+
 
 def new_id() -> str:
     return uuid.uuid4().hex
@@ -196,7 +200,9 @@ class Order(Base):
 
     delivery_method: Mapped[str] = mapped_column(String(10))  # INSTANT/NEXT_DAY/REGULAR
     subtotal: Mapped[int] = mapped_column(Integer)
-    discount: Mapped[int] = mapped_column(Integer, default=0)  # dipakai Level 4
+    discount: Mapped[int] = mapped_column(Integer, default=0)
+    discount_code: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    discount_type: Mapped[str | None] = mapped_column(String(10), nullable=True)  # VOUCHER/PROMO
     delivery_fee: Mapped[int] = mapped_column(Integer)
     tax: Mapped[int] = mapped_column(Integer)  # PPN 12%
     total: Mapped[int] = mapped_column(Integer)
@@ -247,3 +253,36 @@ class OrderStatusHistory(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     order: Mapped[Order] = relationship(back_populates="history")
+
+
+class Voucher(Base):
+    """Voucher diskon: punya tanggal kadaluarsa DAN sisa kuota pemakaian.
+    Kode unik case-insensitive (disimpan uppercase)."""
+
+    __tablename__ = "vouchers"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    code: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    description: Mapped[str] = mapped_column(String(255), default="")
+    percent: Mapped[int] = mapped_column(Integer)  # persentase potongan 1..100
+    max_discount: Mapped[int] = mapped_column(Integer, default=0)  # 0 = tanpa batas
+    min_spend: Mapped[int] = mapped_column(Integer, default=0)  # subtotal minimum
+    remaining_usage: Mapped[int] = mapped_column(Integer)  # sisa kuota
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Promo(Base):
+    """Promo diskon: punya tanggal kadaluarsa (tanpa batas kuota pemakaian).
+    Kode unik case-insensitive (disimpan uppercase)."""
+
+    __tablename__ = "promos"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    code: Mapped[str] = mapped_column(String(30), unique=True, index=True)
+    description: Mapped[str] = mapped_column(String(255), default="")
+    percent: Mapped[int] = mapped_column(Integer)  # persentase potongan 1..100
+    max_discount: Mapped[int] = mapped_column(Integer, default=0)  # 0 = tanpa batas
+    min_spend: Mapped[int] = mapped_column(Integer, default=0)  # subtotal minimum
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

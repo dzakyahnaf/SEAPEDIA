@@ -4,11 +4,23 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..deps import require_active_role
-from ..models import ROLE_SELLER, AuthSession, Order, Product, Store
+from ..models import (
+    ROLE_SELLER,
+    STATUS_DIKEMAS,
+    STATUS_DIKEMBALIKAN,
+    STATUS_DIKIRIM,
+    STATUS_MENUNGGU_PENGIRIM,
+    STATUS_SELESAI,
+    AuthSession,
+    Order,
+    Product,
+    Store,
+)
 from ..schemas.auth import MessageResponse
 from ..schemas.order import OrderDetailOut, OrderSummaryOut
+from ..schemas.report import SellerReport
 from ..schemas.seller import ProductPayload, SellerProduct, StorePayload, StoreResponse
-from ..services.orders import order_to_detail, order_to_summary
+from ..services.orders import add_status_history, order_to_detail, order_to_summary
 
 router = APIRouter(
     prefix="/seller",
@@ -229,3 +241,70 @@ def incoming_order_detail(
     if order is None or order.store_id != store.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Pesanan tidak ditemukan.")
     return order_to_detail(order)
+
+
+@router.post("/orders/{order_id}/process", response_model=OrderDetailOut)
+def process_order(
+    order_id: str,
+    session: AuthSession = Depends(require_active_role(ROLE_SELLER)),
+    db: Session = Depends(get_db),
+):
+    """Seller memproses pesanan: memindahkan status dari 'Sedang Dikemas' ke
+    'Menunggu Pengirim' sehingga job pengiriman tersedia bagi Driver (Level 5).
+    Hanya pemilik toko yang boleh memproses pesanannya sendiri."""
+    store = require_own_store(session, db)
+    order = db.get(Order, order_id)
+    if order is None or order.store_id != store.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Pesanan tidak ditemukan.")
+    if order.status != STATUS_DIKEMAS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Pesanan hanya bisa diproses saat berstatus '{STATUS_DIKEMAS}'. "
+            f"Status saat ini: '{order.status}'.",
+        )
+    add_status_history(
+        db, order, STATUS_MENUNGGU_PENGIRIM,
+        note="Pesanan telah diproses penjual dan siap diambil pengirim.",
+    )
+    db.commit()
+    db.refresh(order)
+    return order_to_detail(order)
+
+
+# ---------- Laporan pendapatan ----------
+
+@router.get("/report", response_model=SellerReport)
+def income_report(
+    session: AuthSession = Depends(require_active_role(ROLE_SELLER)),
+    db: Session = Depends(get_db),
+):
+    """Ringkasan pendapatan Seller. Pendapatan dihitung dari nilai barang
+    (subtotal - diskon) pesanan yang sudah selesai; ongkir milik Driver dan
+    PPN milik negara, sehingga tidak dihitung sebagai pendapatan Seller.
+    Pesanan yang dikembalikan tidak dihitung."""
+    store = require_own_store(session, db)
+    orders = db.scalars(
+        select(Order).where(Order.store_id == store.id)
+    ).all()
+
+    total_orders = len(orders)
+    completed = [o for o in orders if o.status == STATUS_SELESAI]
+    returned = [o for o in orders if o.status == STATUS_DIKEMBALIKAN]
+    in_process = [
+        o for o in orders
+        if o.status in (STATUS_DIKEMAS, STATUS_MENUNGGU_PENGIRIM, STATUS_DIKIRIM)
+    ]
+    # Pendapatan bersih = nilai barang (subtotal - diskon) dari pesanan selesai.
+    net_income = sum(o.subtotal - o.discount for o in completed)
+    gross_sales = sum(o.subtotal for o in completed)
+
+    return SellerReport(
+        store_name=store.name,
+        total_orders=total_orders,
+        completed_orders=len(completed),
+        in_process_orders=len(in_process),
+        returned_orders=len(returned),
+        gross_sales=gross_sales,
+        total_discount_given=sum(o.discount for o in completed),
+        net_income=net_income,
+    )

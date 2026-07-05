@@ -214,6 +214,7 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     buyer: Mapped[User] = relationship(foreign_keys=[buyer_id])
+    driver: Mapped["User | None"] = relationship(foreign_keys=[driver_id])
     store: Mapped[Store] = relationship()
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
@@ -286,3 +287,15 @@ class Promo(Base):
     min_spend: Mapped[int] = mapped_column(Integer, default=0)  # subtotal minimum
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class SimClock(Base):
+    """Jam simulasi (single-row, id=1). offset_days ditambahkan ke waktu nyata
+    HANYA saat mengevaluasi keterlambatan pesanan (SLA overdue) — tidak
+    memengaruhi kadaluarsa token/sesi. Dipakai untuk mensimulasikan 'maju hari'
+    di demo tanpa harus menunggu waktu nyata."""
+
+    __tablename__ = "sim_clock"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    offset_days: Mapped[int] = mapped_column(Integer, default=0)

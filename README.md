@@ -4,10 +4,11 @@ Marketplace multi-peran yang menghubungkan **Pembeli**, **Penjual**, dan
 **Pengantar** dalam satu ekosistem — dibangun untuk Technical Challenge
 Software Engineering Academy COMPFEST 18.
 
-> **Status pengerjaan: Level 4 selesai** (Level 1: Public Marketplace &
+> **Status pengerjaan: Level 5 selesai** (Level 1: Public Marketplace &
 > Auth multi-role · Level 2: Seller Experience · Level 3: Buyer Wallet,
-> Cart, Checkout · Level 4: Diskon Voucher/Promo, Pemrosesan Pesanan Seller,
-> Laporan). Level berikutnya sedang dikerjakan bertahap — lihat riwayat commit.
+> Cart, Checkout · Level 4: Diskon, Pemrosesan Pesanan, Laporan · Level 5:
+> Delivery & Driver Workflow). Level berikutnya sedang dikerjakan bertahap —
+> lihat riwayat commit.
 
 ## Tech Stack
 
@@ -334,11 +335,51 @@ expired); Promo `GAJIAN`, `ONGKIRHEMAT`.
   hitungan pesanan per status. Ongkir (milik Driver) dan PPN (milik negara)
   tidak dihitung sebagai pendapatan Seller.
 
+## Delivery & Driver Workflow (Level 5)
+
+### Alur Job Pengiriman
+
+```
+Sedang Dikemas ──(Seller proses)──▶ Menunggu Pengirim
+                                          │ (job muncul untuk Driver)
+                                          ▼
+                              (Driver ambil job) ──▶ Sedang Dikirim
+                                          │
+                              (Driver konfirmasi) ──▶ Pesanan Selesai
+```
+
+- Job hanya muncul untuk Driver saat pesanan berstatus **Menunggu Pengirim**
+  dan belum diambil Driver lain. Pesanan **Sedang Dikemas** tidak terlihat.
+- **Satu order hanya boleh punya satu Driver aktif.** "Ambil job" memakai
+  **UPDATE bersyarat atomik**
+  (`… WHERE status='Menunggu Pengirim' AND driver_id IS NULL`), sehingga bila
+  dua Driver menekan tombol bersamaan hanya satu yang berhasil; yang lain
+  mendapat `409`.
+- Setiap transisi status tercatat di riwayat status dengan timestamp; Buyer
+  dan Seller dapat memantau progres pengiriman secara real-time dari halaman
+  pesanan mereka.
+
+### Aturan Earning Driver
+
+**Earning Driver = 80% dari ongkos kirim** pesanan yang berhasil diselesaikan
+(sisanya 20% dianggap potongan platform). Contoh: metode Instant (ongkir
+Rp25.000) memberi earning Rp20.000. Earning hanya dihitung untuk job berstatus
+**Pesanan Selesai**.
+
+Endpoint Level 5 (semua butuh **role aktif DRIVER**):
+
+| Method | Endpoint                          | Keterangan                            |
+| ------ | --------------------------------- | ------------------------------------- |
+| GET    | `/api/driver/jobs`                | Daftar job tersedia (Menunggu Pengirim)|
+| GET    | `/api/driver/jobs/{order_id}`     | Detail job (tersedia atau milik sendiri)|
+| POST   | `/api/driver/jobs/{order_id}/take`| Ambil job (atomik) → Sedang Dikirim   |
+| POST   | `/api/driver/jobs/{order_id}/complete` | Konfirmasi → Pesanan Selesai     |
+| GET    | `/api/driver/earnings`            | Job aktif, riwayat, total earning     |
+
 ## Aturan Bisnis Level Lanjut (placeholder)
 
 Aturan berikut disyaratkan soal dan akan didokumentasikan penuh saat levelnya
 dikerjakan:
 
-- **Aturan earning Driver** (Level 5).
 - **SLA pengiriman & simulasi hari berikutnya** (Level 6).
 - **Catatan keamanan lengkap** (Level 7).

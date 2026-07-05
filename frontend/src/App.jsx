@@ -16,12 +16,13 @@ import Cart from "./pages/buyer/Cart";
 import Checkout from "./pages/buyer/Checkout";
 import OrderDetail from "./pages/buyer/OrderDetail";
 import Orders from "./pages/buyer/Orders";
+import DriverDashboard from "./pages/driver/DriverDashboard";
+import DriverJobDetail from "./pages/driver/DriverJobDetail";
 import SellerDashboard from "./pages/seller/SellerDashboard";
 import SellerOrderDetail from "./pages/seller/SellerOrderDetail";
 import SellerOrders from "./pages/seller/SellerOrders";
 import SellerReport from "./pages/seller/SellerReport";
 import AdminDashboard from "./pages/shells/AdminDashboard";
-import DriverDashboard from "./pages/shells/DriverDashboard";
 
 export default function App() {
   return (
@@ -141,6 +142,14 @@ export default function App() {
               element={
                 <ProtectedRoute roles={["DRIVER"]}>
                   <DriverDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/driver/jobs/:id"
+              element={
+                <ProtectedRoute roles={["DRIVER"]}>
+                  <DriverJobDetail />
                 </ProtectedRoute>
               }
             />

@@ -4,12 +4,11 @@ Marketplace multi-peran yang menghubungkan **Pembeli**, **Penjual**, dan
 **Pengantar** dalam satu ekosistem — dibangun untuk Technical Challenge
 Software Engineering Academy COMPFEST 18.
 
-> **Status pengerjaan: Level 6 selesai** (Level 1: Public Marketplace &
-> Auth multi-role · Level 2: Seller Experience · Level 3: Buyer Wallet,
-> Cart, Checkout · Level 4: Diskon, Pemrosesan Pesanan, Laporan · Level 5:
-> Delivery & Driver Workflow · Level 6: Admin Monitoring & Overdue Handling).
-> Level 7 (security hardening & finalisasi) sedang dikerjakan — lihat riwayat
-> commit.
+> **Status pengerjaan: SELESAI Level 1–7 (core challenge 100 poin).**
+> Level 1: Public Marketplace & Auth multi-role · Level 2: Seller Experience ·
+> Level 3: Buyer Wallet, Cart, Checkout · Level 4: Diskon, Pemrosesan Pesanan,
+> Laporan · Level 5: Delivery & Driver Workflow · Level 6: Admin Monitoring &
+> Overdue Handling · Level 7: Security Hardening & Finalisasi.
 
 ## Tech Stack
 
@@ -109,20 +108,9 @@ Aturan inti yang diimplementasikan sejak Level 1:
   admin-only, langsung aktif sebagai `ADMIN` saat login, dan hanya dibuat
   melalui seed.
 
-## Sesi & Keamanan (ringkasan Level 1)
-
-- Password disimpan sebagai hash **bcrypt**.
-- Autentikasi memakai **JWT Bearer** dengan `jti` yang menunjuk ke **sesi
-  server-side** — logout menghapus sesi sehingga token lama benar-benar tidak
-  bisa dipakai lagi (bukan hanya dihapus di sisi klien).
-- Token kedaluwarsa dalam 24 jam (bisa diatur via `TOKEN_EXPIRE_HOURS`).
-- Semua query database melalui SQLAlchemy ORM (parameterized — aman dari SQL
-  Injection).
-- Komentar review disimpan sebagai teks polos dan dirender sebagai teks oleh
-  React (escaped otomatis) — skrip tidak pernah dieksekusi. Hardening formal
-  dinilai di Level 7.
-- Validasi input memakai Pydantic: format email, panjang username/password,
-  rating 1–5, dsb.
+> **Keamanan** (bcrypt, sesi JWT server-side, ORM anti-SQLi, XSS-safe,
+> RBAC per role-aktif) didokumentasikan lengkap di bagian
+> [Catatan Keamanan (Level 7)](#catatan-keamanan-level-7) di bawah.
 
 ## Review Aplikasi (Publik)
 
@@ -448,7 +436,145 @@ Endpoint Level 6 (semua butuh **role aktif ADMIN**):
 | GET/POST | `/api/admin/vouchers`         | List / generate voucher (Level 4)   |
 | GET/POST | `/api/admin/promos`           | List / generate promo (Level 4)     |
 
-## Catatan Keamanan (Level 7 — placeholder)
+## Catatan Keamanan (Level 7)
 
-Akan didokumentasikan penuh saat Level 7: SQL Injection, XSS, validasi input,
-perilaku sesi, dan role-based access control.
+### SQL Injection
+
+Seluruh akses database memakai **SQLAlchemy ORM / Core**. Setiap nilai input
+di-bind sebagai parameter query, bukan digabung ke string SQL. Tidak ada satu
+pun raw SQL string di codebase. Contoh: pencarian katalog memakai
+`Product.name.ilike(f"%{search}%")` — nilai `search` tetap dikirim sebagai
+parameter terikat, sehingga payload seperti `' OR 1=1 --` diperlakukan sebagai
+teks literal (menghasilkan 0 kecocokan), bukan perintah SQL.
+
+### XSS (Cross-Site Scripting)
+
+- Semua konten buatan pengguna (review aplikasi, nama, deskripsi) dirender oleh
+  **React sebagai teks**, yang otomatis meng-escape karakter HTML. Tidak ada
+  penggunaan `dangerouslySetInnerHTML` di seluruh frontend.
+- Akibatnya, komentar berisi `<script>alert('xss')</script>` tampil apa adanya
+  sebagai teks dan **tidak pernah dieksekusi**, serta tidak merusak layout
+  (komentar dibungkus `break-words`).
+- Lapisan tambahan di server: `clean_text()` membuang karakter kontrol tak
+  terlihat dari input publik dan merapikan spasi.
+
+### Validasi Input
+
+Validasi memakai **Pydantic** di setiap payload, dengan pesan error jelas
+(HTTP 422):
+
+| Field       | Aturan                                              |
+| ----------- | --------------------------------------------------- |
+| email       | Format email valid (`EmailStr`)                     |
+| phone       | 8–15 digit angka (regex)                            |
+| rating      | Integer 1–5                                         |
+| quantity    | Integer ≥ 1                                         |
+| price       | Integer > 0                                         |
+| stock       | Integer ≥ 0                                         |
+| discount %  | Integer 1–100; nominal ≥ 0                          |
+| username    | 3–30 char alfanumerik/underscore                    |
+| password    | Minimal 8 karakter                                  |
+
+Input berbahaya/tak valid ditolak dengan status 422 dan detail field.
+
+### Sesi & Autentikasi
+
+- Password disimpan sebagai hash **bcrypt** (tidak pernah plaintext).
+- Autentikasi memakai **JWT Bearer** yang `jti`-nya menunjuk ke **sesi
+  server-side** (`auth_sessions`). **Logout menghapus baris sesi**, sehingga
+  token yang sama langsung tidak berlaku (bukan sekadar dihapus di klien).
+- **Masa berlaku token/sesi: 24 jam** (dapat diatur via `TOKEN_EXPIRE_HOURS`).
+  Token yang kedaluwarsa atau rusak ditolak 401.
+
+### Role-Based Access Control (RBAC)
+
+- **Backend adalah otoritas tunggal.** Setiap endpoint privat memakai
+  dependency `require_active_role(...)` yang memverifikasi **role aktif sesi**
+  di server — UI tidak dipercaya. Mengubah route frontend secara manual tidak
+  memberi akses karena API tetap menolak (403).
+- Otorisasi berdasar **role aktif**, bukan sekadar daftar role yang dimiliki:
+  user multi-role yang aktif sebagai BUYER tetap ditolak di endpoint SELLER
+  sampai ia mengganti role aktif.
+- **Isolasi kepemilikan**: Seller hanya bisa mengubah produk/tokonya sendiri,
+  Buyer hanya melihat pesanan/alamatnya sendiri, Driver hanya job miliknya —
+  akses lintas-user ditolak 403/404.
+- Endpoint & halaman Admin hanya untuk role aktif ADMIN; akun ADMIN tidak bisa
+  dibuat lewat registrasi publik (hanya via seed).
+
+### Ringkasan Uji Keamanan (dapat didemokan)
+
+| Uji                                            | Hasil                        |
+| ---------------------------------------------- | ---------------------------- |
+| `<script>` di komentar review                  | Tersimpan & tampil sbg teks  |
+| `' OR '1'='1` di login                          | Ditolak 401                  |
+| Payload SQLi di pencarian                       | Jadi literal, 0 hasil        |
+| Registrasi role ADMIN                           | Ditolak 422                  |
+| BUYER akses endpoint SELLER/DRIVER/ADMIN        | Ditolak 403                  |
+| Akses pesanan/alamat milik user lain            | Ditolak 404                  |
+| Pakai token setelah logout                      | Ditolak 401                  |
+| Field tak valid (rating 0, harga negatif, dll.) | Ditolak 422                  |
+
+## Panduan Testing End-to-End (Demo)
+
+Alur lengkap untuk mendemokan seluruh sistem. Jalankan backend & frontend
+(lihat [Menjalankan Proyek](#menjalankan-proyek)), buka `http://localhost:5173`.
+
+**1. Guest & Review (Level 1)**
+- Buka beranda tanpa login → jelajahi katalog & detail produk.
+- Di beranda, kirim review aplikasi (rating + komentar) tanpa login → tampil di
+  daftar. Coba komentar `<script>alert(1)</script>` → tampil sebagai teks biasa.
+
+**2. Auth & Multi-Role (Level 1)**
+- Login `rina` / `Multi123!` → muncul halaman pilih role (punya 3 role) → pilih
+  peran → dashboard sesuai peran. Ganti peran aktif dari navbar/dashboard.
+
+**3. Seller (Level 2)**
+- Login `tokomaju` / `Seller123!` → dashboard Penjual → tambah/ubah/hapus
+  produk. Coba buat toko baru bernama "Warung Ijo" (akun seller baru) → ditolak
+  (nama kembar). Produk baru langsung muncul di katalog publik.
+
+**4. Buyer: Wallet → Cart → Checkout (Level 3)**
+- Login `budi` / `Buyer123!` → dashboard Pembeli → top-up saldo.
+- Buka produk → tambah ke keranjang. Coba tambah produk dari toko berbeda →
+  muncul aturan single-store (tawaran kosongkan keranjang).
+- Checkout: pilih alamat & metode kirim → ringkasan menampilkan subtotal,
+  diskon, ongkir, PPN 12%, total → bayar dengan wallet.
+
+**5. Diskon & Proses Pesanan (Level 4)**
+- Di checkout, masukkan kode `HEMAT10` (voucher) atau `GAJIAN` (promo) → PPN
+  menyesuaikan (diskon sebelum pajak). Kode `KADALUARSA` → ditolak.
+- Login `tokomaju` → Pesanan Masuk → **Proses Pesanan** → status jadi
+  "Menunggu Pengirim". Cek Laporan Pendapatan.
+- Cek Laporan Pengeluaran di dashboard Buyer.
+
+**6. Driver (Level 5)**
+- Login `dika` / `Driver123!` → dashboard Pengantar → job muncul (setelah
+  diproses seller) → **Ambil Job** (status "Sedang Dikirim") → **Konfirmasi
+  Selesai** (status "Pesanan Selesai") → penghasilan bertambah 80% ongkir.
+- Buka dua sesi driver (`dika` & `rina` sbg Driver) untuk menguji: hanya satu
+  yang berhasil ambil job yang sama.
+
+**7. Admin, Overdue & Simulasi Waktu (Level 6)**
+- Login `admin` / `Admin123!` → dashboard Admin → jelajahi tab monitoring.
+- Tab "Voucher & Promo" → generate voucher/promo baru.
+- Tab "Overdue & Simulasi": buat dulu 1 pesanan (Buyer) yang tidak diselesaikan
+  → di sini **majukan waktu +7 hari** → pesanan muncul sebagai overdue →
+  **Proses Overdue** → cek: saldo Buyer di-refund penuh (transaksi REFUND),
+  stok produk pulih, status pesanan "Dikembalikan".
+
+**8. Keamanan (Level 7)** — lihat tabel Ringkasan Uji Keamanan di atas.
+
+### Automated Smoke Tests
+
+Skrip pengujian API per level disertakan (menguji business rule & keamanan
+lewat HTTP). Dengan backend berjalan di port 8000, jalankan mis.:
+
+```bash
+# dari folder backend, dengan venv aktif
+python -m app.seed            # pastikan data demo tersedia
+# skrip uji ada di riwayat pengembangan; endpoint dapat diuji via /docs
+```
+
+Dokumentasi interaktif **Swagger UI** di `http://localhost:8000/docs`
+memungkinkan evaluator menguji setiap endpoint langsung (klik **Authorize**,
+tempel token dari `/auth/login`).

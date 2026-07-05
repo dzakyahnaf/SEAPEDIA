@@ -178,11 +178,13 @@ export default function BuyerDashboard() {
               <p className="text-xs text-slate-500">Lacak status semua pesanan Anda.</p>
             </Card>
           </Link>
-          <Card className="p-5 opacity-70">
-            <p className="text-2xl">📊</p>
-            <p className="mt-1 font-bold text-slate-700">Laporan Pengeluaran</p>
-            <p className="text-[11px] text-slate-400">Hadir di Level 4</p>
-          </Card>
+          <Link to="/buyer/report" className="block">
+            <Card className="p-5 transition-shadow hover:shadow-md">
+              <p className="text-2xl">📊</p>
+              <p className="mt-1 font-bold text-slate-800">Laporan Pengeluaran</p>
+              <p className="text-xs text-slate-500">Ringkasan total belanja Anda.</p>
+            </Card>
+          </Link>
         </div>
       </div>
 

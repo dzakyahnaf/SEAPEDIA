@@ -4,10 +4,10 @@ Marketplace multi-peran yang menghubungkan **Pembeli**, **Penjual**, dan
 **Pengantar** dalam satu ekosistem — dibangun untuk Technical Challenge
 Software Engineering Academy COMPFEST 18.
 
-> **Status pengerjaan: Level 3 selesai** (Level 1: Public Marketplace &
+> **Status pengerjaan: Level 4 selesai** (Level 1: Public Marketplace &
 > Auth multi-role · Level 2: Seller Experience · Level 3: Buyer Wallet,
-> Cart, dan Checkout). Level berikutnya sedang dikerjakan bertahap — lihat
-> riwayat commit.
+> Cart, Checkout · Level 4: Diskon Voucher/Promo, Pemrosesan Pesanan Seller,
+> Laporan). Level berikutnya sedang dikerjakan bertahap — lihat riwayat commit.
 
 ## Tech Stack
 
@@ -266,12 +266,79 @@ Endpoint Level 3 (semua butuh **role aktif BUYER**, kecuali disebut lain):
 | GET    | `/api/seller/orders`            | (SELLER) Pesanan masuk toko sendiri     |
 | GET    | `/api/seller/orders/{id}`       | (SELLER) Detail pesanan toko sendiri    |
 
+## Diskon: Voucher & Promo (Level 4)
+
+SEAPEDIA mendukung dua jenis diskon yang dibedakan secara eksplisit:
+
+| Aspek            | **Voucher**                       | **Promo**                     |
+| ---------------- | --------------------------------- | ----------------------------- |
+| Batas waktu      | Punya tanggal kadaluarsa          | Punya tanggal kadaluarsa      |
+| Batas pemakaian  | Punya sisa kuota (`remaining_usage`) | Tanpa kuota                |
+| Potongan         | Persentase (opsional `max_discount`, `min_spend`) | Sama         |
+
+### Aturan Kombinasi (PENTING)
+
+**Voucher dan Promo TIDAK bisa digabung.** Satu checkout menerima **maksimal
+satu kode diskon**. Sistem mendeteksi otomatis apakah kode yang dimasukkan
+adalah Voucher atau Promo, lalu menampilkannya dengan jelas di ringkasan
+checkout (badge "Voucher"/"Promo" + kode).
+
+### Posisi Diskon terhadap PPN 12%
+
+Urutan perhitungan konsisten dan didokumentasikan:
+
+```
+subtotal = Σ (harga × kuantitas)
+diskon   = potongan dari Voucher/Promo (dibatasi max_discount, syarat min_spend)
+PPN 12%  = 12% × (subtotal − diskon)   ← diskon diterapkan SEBELUM pajak
+total    = subtotal − diskon + ongkir + PPN
+```
+
+Jadi **diskon mengurangi basis pajak** — semakin besar diskon, semakin kecil
+PPN. Ongkir tidak pernah dikenai PPN.
+
+### Aturan Validasi
+
+- Voucher/Promo kadaluarsa → ditolak `400`.
+- Voucher tanpa sisa kuota → ditolak `400`.
+- Subtotal di bawah `min_spend` → ditolak `400`.
+- Kode tidak ditemukan → `404`.
+- Diskon tidak pernah melebihi subtotal.
+- Kuota voucher berkurang **hanya setelah checkout berhasil** (bukan saat
+  preview), sehingga preview tidak "membakar" kuota.
+
+Kode diskon disiapkan melalui **seed data** dan **endpoint Admin**
+(`POST /api/admin/vouchers`, `POST /api/admin/promos`). UI manajemen Admin
+lengkap hadir di Level 6.
+
+Kode demo hasil seed: Voucher `HEMAT10`, `NEWBIE25`, `KADALUARSA` (sengaja
+expired); Promo `GAJIAN`, `ONGKIRHEMAT`.
+
+## Pemrosesan Pesanan Seller (Level 4)
+
+- Seller memproses pesanan via `POST /api/seller/orders/{id}/process`:
+  status **Sedang Dikemas → Menunggu Pengirim**, tercatat di riwayat status
+  dengan timestamp.
+- Hanya pemilik toko yang boleh memproses pesanannya; pesanan yang sudah
+  diproses tidak bisa diproses ulang (`400`).
+- Sebuah pesanan **tidak tersedia bagi Driver** (Level 5) sebelum diproses
+  Seller — sesuai lifecycle.
+
+## Laporan Transaksi (Level 4)
+
+- **Buyer** (`GET /api/buyer/report`): total pengeluaran, hemat diskon, PPN
+  dibayar, dan hitungan pesanan per status. Pesanan yang dikembalikan tidak
+  dihitung.
+- **Seller** (`GET /api/seller/report`): pendapatan bersih (subtotal − diskon
+  dari pesanan selesai), penjualan kotor, total diskon diberikan, dan
+  hitungan pesanan per status. Ongkir (milik Driver) dan PPN (milik negara)
+  tidak dihitung sebagai pendapatan Seller.
+
 ## Aturan Bisnis Level Lanjut (placeholder)
 
 Aturan berikut disyaratkan soal dan akan didokumentasikan penuh saat levelnya
 dikerjakan:
 
-- **Kombinasi Voucher & Promo** (Level 4).
 - **Aturan earning Driver** (Level 5).
 - **SLA pengiriman & simulasi hari berikutnya** (Level 6).
 - **Catatan keamanan lengkap** (Level 7).

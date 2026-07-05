@@ -11,10 +11,25 @@ export default function SellerOrderDetail() {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [processError, setProcessError] = useState("");
 
   useEffect(() => {
     api(`/seller/orders/${id}`).then(setOrder).catch(() => setNotFound(true));
   }, [id]);
+
+  async function processOrder() {
+    setProcessing(true);
+    setProcessError("");
+    try {
+      const updated = await api(`/seller/orders/${id}/process`, { method: "POST" });
+      setOrder(updated);
+    } catch (err) {
+      setProcessError(err.message);
+    } finally {
+      setProcessing(false);
+    }
+  }
 
   if (notFound) {
     return (
@@ -96,10 +111,27 @@ export default function SellerOrderDetail() {
             <p className="mt-1 text-sm text-slate-500">{order.full_address}</p>
           </Card>
 
-          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-            ⏭️ Aksi <strong>Proses Pesanan</strong> (Sedang Dikemas → Menunggu
-            Pengirim) hadir di Level 4.
-          </div>
+          {/* Aksi proses pesanan */}
+          {order.status === "Sedang Dikemas" ? (
+            <Card className="border-sea-200 bg-sea-50/40 p-5">
+              <h3 className="font-bold text-slate-800">Proses Pesanan</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                Tandai pesanan ini selesai dikemas. Statusnya akan berubah ke
+                <strong> Menunggu Pengirim</strong> dan job pengiriman menjadi
+                tersedia bagi Driver.
+              </p>
+              {processError && (
+                <p className="mt-2 text-sm text-rose-600">{processError}</p>
+              )}
+              <Button className="mt-3" disabled={processing} onClick={processOrder}>
+                {processing ? "Memproses…" : "✅ Proses Pesanan"}
+              </Button>
+            </Card>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+              Pesanan sudah diproses. Status saat ini: <strong>{order.status}</strong>.
+            </div>
+          )}
         </div>
 
         <div className="lg:col-span-2">

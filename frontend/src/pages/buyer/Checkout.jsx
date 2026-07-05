@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
+import Input from "../../components/ui/Input";
 import { api } from "../../lib/api";
 import { formatIDR } from "../../lib/format";
 
@@ -17,6 +18,12 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
+  // Diskon: kode yang sedang diketik vs kode yang sudah diterapkan.
+  const [discountInput, setDiscountInput] = useState("");
+  const [appliedCode, setAppliedCode] = useState("");
+  const [discountError, setDiscountError] = useState("");
+  const [applyingDiscount, setApplyingDiscount] = useState(false);
+
   useEffect(() => {
     api("/buyer/addresses").then((list) => {
       setAddresses(list);
@@ -26,23 +33,59 @@ export default function Checkout() {
     api("/buyer/delivery-methods").then(setMethods);
   }, []);
 
-  // Ringkasan dihitung backend (source of truth) setiap metode berubah.
+  // Ringkasan selalu dihitung backend (source of truth) berdasar metode
+  // pengiriman + kode diskon yang diterapkan.
+  const loadPreview = useCallback(
+    async (code) => {
+      setPreview(null);
+      setPreviewError("");
+      try {
+        const body = { delivery_method: method };
+        if (code) body.discount_code = code;
+        const result = await api("/buyer/checkout/preview", { method: "POST", body });
+        setPreview(result);
+      } catch (err) {
+        setPreviewError(err.message);
+      }
+    },
+    [method]
+  );
+
   useEffect(() => {
-    setPreview(null);
-    setPreviewError("");
-    api("/buyer/checkout/preview", { method: "POST", body: { delivery_method: method } })
-      .then(setPreview)
-      .catch((err) => setPreviewError(err.message));
-  }, [method]);
+    loadPreview(appliedCode);
+  }, [loadPreview, appliedCode]);
+
+  async function applyDiscount() {
+    const code = discountInput.trim();
+    if (!code) return;
+    setDiscountError("");
+    setApplyingDiscount(true);
+    try {
+      // Validasi lewat preview; jika gagal, jangan hapus ringkasan sebelumnya.
+      const body = { delivery_method: method, discount_code: code };
+      const result = await api("/buyer/checkout/preview", { method: "POST", body });
+      setPreview(result);
+      setAppliedCode(code);
+    } catch (err) {
+      setDiscountError(err.message);
+    } finally {
+      setApplyingDiscount(false);
+    }
+  }
+
+  function removeDiscount() {
+    setAppliedCode("");
+    setDiscountInput("");
+    setDiscountError("");
+  }
 
   async function handleCheckout() {
     setSubmitError("");
     setSubmitting(true);
     try {
-      const order = await api("/buyer/checkout", {
-        method: "POST",
-        body: { address_id: addressId, delivery_method: method },
-      });
+      const body = { address_id: addressId, delivery_method: method };
+      if (appliedCode) body.discount_code = appliedCode;
+      const order = await api("/buyer/checkout", { method: "POST", body });
       navigate(`/buyer/orders/${order.id}`, { state: { justOrdered: true } });
     } catch (err) {
       setSubmitError(err.message);
@@ -54,7 +97,7 @@ export default function Checkout() {
     return <div className="py-24 text-center text-slate-400">Memuat…</div>;
   }
 
-  if (previewError) {
+  if (previewError && !preview) {
     return (
       <div className="mx-auto max-w-lg px-4 py-24 text-center">
         <p className="text-5xl">🛒</p>
@@ -66,8 +109,7 @@ export default function Checkout() {
     );
   }
 
-  const canSubmit =
-    addressId && preview && preview.sufficient_balance && !submitting;
+  const canSubmit = addressId && preview && preview.sufficient_balance && !submitting;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
@@ -150,6 +192,56 @@ export default function Checkout() {
               ))}
             </div>
           </Card>
+
+          {/* Kode diskon */}
+          <Card className="p-6">
+            <h2 className="font-bold text-slate-800">🎟️ Voucher / Promo</h2>
+            <p className="mt-1 text-xs text-slate-400">
+              Masukkan satu kode Voucher atau Promo (tidak bisa digabung).
+            </p>
+            {appliedCode && preview?.applied_discount ? (
+              <div className="mt-3 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3.5">
+                <div>
+                  <p className="text-sm font-bold text-emerald-800">
+                    <Badge className="mr-1 bg-emerald-100 text-emerald-700">
+                      {preview.applied_discount.type === "VOUCHER" ? "Voucher" : "Promo"}
+                    </Badge>
+                    {preview.applied_discount.code} diterapkan
+                  </p>
+                  <p className="text-xs text-emerald-700">
+                    {preview.applied_discount.description ||
+                      `Potongan ${preview.applied_discount.percent}%`}{" "}
+                    · hemat {formatIDR(preview.applied_discount.amount)}
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm" className="text-rose-600!" onClick={removeDiscount}>
+                  Hapus
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <div className="flex gap-2">
+                  <Input
+                    id="discount-code"
+                    placeholder="Masukkan kode, contoh: HEMAT10"
+                    value={discountInput}
+                    onChange={(e) => setDiscountInput(e.target.value.toUpperCase())}
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="secondary"
+                    disabled={applyingDiscount || !discountInput.trim()}
+                    onClick={applyDiscount}
+                  >
+                    {applyingDiscount ? "…" : "Terapkan"}
+                  </Button>
+                </div>
+                {discountError && (
+                  <p className="mt-2 text-xs text-rose-600">{discountError}</p>
+                )}
+              </div>
+            )}
+          </Card>
         </div>
 
         {/* Ringkasan */}
@@ -160,9 +252,7 @@ export default function Checkout() {
               <p className="mt-3 text-sm text-slate-400">Menghitung…</p>
             ) : (
               <>
-                <p className="mt-1 text-xs text-slate-400">
-                  dari 🏪 {preview.store.name}
-                </p>
+                <p className="mt-1 text-xs text-slate-400">dari 🏪 {preview.store.name}</p>
                 <div className="mt-3 space-y-1.5 border-b border-slate-100 pb-3 text-sm">
                   {preview.items.map((item) => (
                     <div key={item.id} className="flex justify-between text-slate-600">
@@ -178,8 +268,11 @@ export default function Checkout() {
                     <span>Subtotal</span>
                     <span>{formatIDR(preview.subtotal)}</span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Diskon</span>
+                  <div className={`flex justify-between ${preview.discount > 0 ? "text-emerald-600" : "text-slate-600"}`}>
+                    <span>
+                      Diskon
+                      {preview.applied_discount && ` (${preview.applied_discount.code})`}
+                    </span>
                     <span>− {formatIDR(preview.discount)}</span>
                   </div>
                   <div className="flex justify-between text-slate-600">

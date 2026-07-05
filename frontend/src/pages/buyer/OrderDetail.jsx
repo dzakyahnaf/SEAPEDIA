@@ -81,8 +81,12 @@ export default function OrderDetail() {
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal</span><span>{formatIDR(order.subtotal)}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Diskon</span><span>− {formatIDR(order.discount)}</span>
+              <div className={`flex justify-between ${order.discount > 0 ? "text-emerald-600" : "text-slate-600"}`}>
+                <span>
+                  Diskon
+                  {order.discount_code && ` (${order.discount_code})`}
+                </span>
+                <span>− {formatIDR(order.discount)}</span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Ongkir ({order.delivery_method_label})</span>

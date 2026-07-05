@@ -220,19 +220,16 @@ export default function SellerDashboard() {
             <Card className="h-full p-4 transition-shadow hover:shadow-md">
               <p className="text-xl">📥</p>
               <p className="mt-1 text-sm font-bold text-slate-800">Pesanan Masuk</p>
-              <p className="text-[11px] text-sea-700">Lihat pesanan dari pembeli →</p>
+              <p className="text-[11px] text-sea-700">Lihat & proses pesanan →</p>
             </Card>
           </Link>
-          {[
-            { icon: "✅", title: "Proses Pesanan", level: 4 },
-            { icon: "💰", title: "Laporan Pendapatan", level: 4 },
-          ].map((f) => (
-            <Card key={f.title} className="p-4 opacity-70">
-              <p className="text-xl">{f.icon}</p>
-              <p className="mt-1 text-sm font-bold text-slate-700">{f.title}</p>
-              <p className="text-[11px] text-slate-400">Hadir di Level {f.level}</p>
+          <Link to="/seller/report">
+            <Card className="h-full p-4 transition-shadow hover:shadow-md">
+              <p className="text-xl">💰</p>
+              <p className="mt-1 text-sm font-bold text-slate-800">Laporan Pendapatan</p>
+              <p className="text-[11px] text-sea-700">Ringkasan pendapatan toko →</p>
             </Card>
-          ))}
+          </Link>
         </div>
       </section>
     </div>
